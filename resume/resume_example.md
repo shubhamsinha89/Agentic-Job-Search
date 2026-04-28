@@ -1,4 +1,4 @@
-# Shivam Sinha
+# Candidate Name
 
 ## Contact
 - Phone: +91 7289998299 / +91 9006542615
