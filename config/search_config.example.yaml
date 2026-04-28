@@ -1,0 +1,163 @@
+# =============================================================================
+# Agentic Job Search — Configuration
+# Copy this file to search_config.yaml and fill in your details.
+# search_config.yaml is gitignored — your settings stay local.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Email settings
+# -----------------------------------------------------------------------------
+email:
+  recipient: "your-email@gmail.com"
+  subject_prefix: "Top 20 Job Matches"
+
+# -----------------------------------------------------------------------------
+# Schedule (UTC cron expression)
+# Use https://crontab.guru to build your expression.
+# Examples:
+#   "0 5 * * *"    = 9:00 PM PST (5:00 AM UTC) daily
+#   "0 14 * * *"   = 9:00 PM IST (2:00 PM UTC) daily
+#   "0 5 * * 1-5"  = Weekdays only at 9 PM PST
+# -----------------------------------------------------------------------------
+schedule:
+  cron: "0 5 * * *"
+  timezone_note: "All cron times are UTC"
+
+# -----------------------------------------------------------------------------
+# Candidate profile (used to auto-generate search queries)
+# -----------------------------------------------------------------------------
+candidate:
+  name: "Your Name"
+  total_experience_years: 13
+  current_ctc: "12,50,000"
+  notice_period: "1 Month"
+  objective: "Senior HR Manager / Plant HR roles in Leadership"
+
+# -----------------------------------------------------------------------------
+# Target job titles (agent searches for all of these)
+# -----------------------------------------------------------------------------
+target_roles:
+  - "Plant HR Manager"
+  - "Factory HR Manager"
+  - "Manufacturing HR Manager"
+  - "Corporate HR Manager"
+  - "HR Business Partner"
+  - "Senior HR Manager"
+  - "AGM HR"
+  - "DGM HR"
+  # Add or remove roles as needed
+
+# -----------------------------------------------------------------------------
+# Location preferences (higher score = higher priority)
+# Max score must match scoring.location_max below
+# -----------------------------------------------------------------------------
+locations:
+  - name: "Patna / Bihar"
+    keywords: ["Patna", "Bihar", "Muzaffarpur", "Gaya"]
+    score: 12
+  - name: "Delhi NCR"
+    keywords: ["Delhi", "NCR", "Gurgaon", "Noida", "Faridabad", "Greater Noida"]
+    score: 10
+  - name: "West Bengal"
+    keywords: ["Kolkata", "West Bengal", "Howrah", "Durgapur"]
+    score: 8
+  - name: "Jharkhand"
+    keywords: ["Jharkhand", "Ranchi", "Jamshedpur", "Dhanbad", "Bokaro"]
+    score: 7
+  - name: "Rajasthan"
+    keywords: ["Rajasthan", "Jaipur", "Bikaner", "Jodhpur", "Udaipur", "Kota"]
+    score: 6
+  - name: "Bangalore"
+    keywords: ["Bangalore", "Bengaluru"]
+    score: 5
+  - name: "Other India"
+    keywords: []
+    score: 2
+
+# -----------------------------------------------------------------------------
+# Industry preferences (higher score = better industry match)
+# -----------------------------------------------------------------------------
+industries:
+  - name: "Fertilizers / Chemicals"
+    keywords: ["fertilizer", "chemical", "petrochemical", "agrochemical"]
+    score: 8
+  - name: "Food Processing / FMCG"
+    keywords: ["food processing", "FMCG", "food manufacturing", "dairy", "beverage"]
+    score: 8
+  - name: "Flexible Packaging / Films / Plastics"
+    keywords: ["packaging", "BOPET", "BOPP", "films", "plastics", "polymer"]
+    score: 7
+  - name: "Consumer Electronics / Manufacturing"
+    keywords: ["electronics", "consumer electronics", "manufacturing", "semiconductor"]
+    score: 7
+  - name: "EPC / Infrastructure / Power"
+    keywords: ["EPC", "infrastructure", "power", "hydro", "construction", "project"]
+    score: 6
+  - name: "Other Manufacturing"
+    keywords: ["manufacturing", "plant", "factory", "production"]
+    score: 5
+  - name: "Non-manufacturing"
+    keywords: []
+    score: 2
+
+# -----------------------------------------------------------------------------
+# Experience targeting
+# -----------------------------------------------------------------------------
+experience:
+  candidate_years: 13
+  target_min: 10
+  target_max: 15
+
+# -----------------------------------------------------------------------------
+# Job portals to search (set enabled: false to skip a portal)
+# -----------------------------------------------------------------------------
+portals:
+  - name: naukri
+    site: naukri.com
+    enabled: true
+  - name: timesjobs
+    site: timesjobs.com
+    enabled: true
+  - name: iimjobs
+    site: iimjobs.com
+    enabled: true
+  - name: indeed_india
+    site: in.indeed.com
+    enabled: true
+  - name: shine
+    site: shine.com
+    enabled: true
+  - name: foundit
+    site: foundit.in
+    enabled: false   # Inconsistent results
+  - name: linkedin
+    site: linkedin.com/jobs
+    enabled: false   # Blocks automated access
+
+# -----------------------------------------------------------------------------
+# Scoring weights (must sum to 45)
+# -----------------------------------------------------------------------------
+scoring:
+  location_max: 12
+  role_match_max: 15
+  industry_match_max: 8
+  experience_fit_max: 5
+  freshness_max: 5
+  total_max: 45
+
+# -----------------------------------------------------------------------------
+# Results
+# -----------------------------------------------------------------------------
+results:
+  top_n: 20                     # Number of jobs to include in email
+  max_per_search: 10            # Max listings to collect per search query
+  dedup_by: ["company", "title"] # De-duplication keys
+
+# -----------------------------------------------------------------------------
+# Claude remote routine (set after first deploy)
+# -----------------------------------------------------------------------------
+routine:
+  id: ""                        # Populated by deploy_routine.py after creation
+  environment_id: ""            # Your Claude environment ID
+  gmail_connector_uuid: ""      # Your Gmail MCP connector UUID
+  gmail_mcp_url: "https://gmailmcp.googleapis.com/mcp/v1"
