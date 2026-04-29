@@ -1,0 +1,290 @@
+{
+  "name": "Agentic Job Search",
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 5 * * *" }]
+        }
+      }
+    },
+    {
+      "id": "n2",
+      "name": "Load Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "resumePath",    "value": "={{ $env.RESUME_FILE_PATH || '/home/node/resume/resume.md' }}", "type": "string" },
+            { "id": "a2", "name": "emailRecipient","value": "={{ $env.EMAIL_RECIPIENT }}", "type": "string" },
+            { "id": "a3", "name": "anthropicKey",  "value": "={{ $env.ANTHROPIC_API_KEY }}", "type": "string" },
+            { "id": "a4", "name": "braveKey",      "value": "={{ $env.BRAVE_SEARCH_API_KEY }}", "type": "string" },
+            { "id": "a5", "name": "topN",          "value": 20, "type": "number" },
+            { "id": "a6", "name": "indiaPortals",  "value": "naukri.com,timesjobs.com,iimjobs.com,in.indeed.com,shine.com", "type": "string" },
+            { "id": "a7", "name": "usPortals",     "value": "indeed.com,linkedin.com/jobs,glassdoor.com,ziprecruiter.com,dice.com", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "name": "Read Resume File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "parameters": {
+        "operation": "read",
+        "fileName": "={{ $json.resumePath }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Parse Resume (Claude)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $('Load Config').item.json.anthropicKey }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 2048,
+          "messages": [{
+            "role": "user",
+            "content": "={{ 'You are a resume parser. Extract structured JSON from the resume below.\\n\\nReturn ONLY valid JSON with exactly these keys: name, email, phone, location, total_experience_years (number), current_role, target_roles (array of 6 job titles to search for), top_skills (array of 15 keywords), industries (array), profession_category (e.g. Human Resources / Software Engineering / Finance), seniority_level (Junior/Mid/Senior/Lead/Director), summary (2-sentence professional summary), keywords (array of 30 ATS keywords).\\n\\nResume:\\n' + $('Read Resume File').item.json.data }}"
+          }]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n5",
+      "name": "Extract Profile JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.all()[0].json.content[0].text.trim();\nconst cleaned = raw.replace(/^```(?:json)?\\s*/,'').replace(/\\s*```$/,'');\nconst profile = JSON.parse(cleaned);\nconst config = {\n  resumePath: $('Load Config').item.json.resumePath,\n  emailRecipient: $('Load Config').item.json.emailRecipient,\n  anthropicKey: $('Load Config').item.json.anthropicKey,\n  braveKey: $('Load Config').item.json.braveKey,\n  topN: $('Load Config').item.json.topN,\n  indiaPortals: $('Load Config').item.json.indiaPortals.split(','),\n  usPortals: $('Load Config').item.json.usPortals.split(',')\n};\nreturn [{ json: { profile, config } }];"
+      }
+    },
+    {
+      "id": "n6",
+      "name": "Generate Search Queries (Claude)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $json.config.anthropicKey }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 512,
+          "messages": [{
+            "role": "user",
+            "content": "={{ 'Generate 4 job search query templates for this candidate (no site: prefix). Return ONLY a JSON array of 4 strings.\\n\\nProfile:\\n- Profession: ' + $json.profile.profession_category + '\\n- Seniority: ' + $json.profile.seniority_level + '\\n- Experience: ' + $json.profile.total_experience_years + ' years\\n- Target roles: ' + $json.profile.target_roles.slice(0,4).join(', ') + '\\n- Top skills: ' + $json.profile.top_skills.slice(0,6).join(', ') }}"
+          }]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n7",
+      "name": "Build Portal+Query List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.all()[0].json.content[0].text.trim().replace(/^```(?:json)?\\s*/,'').replace(/\\s*```$/,'');\nconst queries = JSON.parse(raw);\nconst profile = $('Extract Profile JSON').item.json.profile;\nconst config = $('Extract Profile JSON').item.json.config;\n\nconst tasks = [];\nfor (const query of queries) {\n  for (const portal of config.indiaPortals) {\n    tasks.push({ json: { query, portal, country: 'India', siteQuery: `site:${portal} ${query} India`, profile, config } });\n  }\n  for (const portal of config.usPortals) {\n    tasks.push({ json: { query, portal, country: 'US', siteQuery: `site:${portal} ${query}`, profile, config } });\n  }\n}\nreturn tasks;"
+      }
+    },
+    {
+      "id": "n8",
+      "name": "Search Brave API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.search.brave.com/res/v1/web/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json" },
+            { "name": "X-Subscription-Token", "value": "={{ $json.config.braveKey }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "q", "value": "={{ $json.siteQuery }}" },
+            { "name": "count", "value": "10" }
+          ]
+        },
+        "options": { "batching": { "batch": { "batchSize": 1, "batchInterval": 600 } } }
+      }
+    },
+    {
+      "id": "n9",
+      "name": "Extract Job Listings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300],
+      "parameters": {
+        "jsCode": "const results = [];\nfor (const item of $input.all()) {\n  const raw = item.json;\n  const portal = raw.portal || '';\n  const country = raw.country || '';\n  const webResults = raw.web?.results || [];\n  for (const r of webResults) {\n    const snippet = r.description || '';\n    const title = r.title || '';\n    const expMatch = snippet.match(/(\\d+[\\-–]\\d+|\\d+\\+?)\\s*(?:years?|yrs?)/i);\n    const dateMatch = snippet.match(/(\\d+\\s+(?:day|hour|week|month)s?\\s+ago|today|just\\s+posted)/i);\n    const locMatch = snippet.match(/\\b(Mumbai|Delhi|NCR|Bangalore|Bengaluru|Chennai|Hyderabad|Pune|Kolkata|Noida|Gurgaon|Patna|Bihar|Rajasthan|Jharkhand|New York|San Francisco|Seattle|Austin|Chicago|Boston|Remote)\\b/i);\n    const coMatch = title.match(/ at ([^|–\\-]+)/);\n    results.push({\n      title: title,\n      company: coMatch ? coMatch[1].trim() : '',\n      location: locMatch ? locMatch[1] : '',\n      experience_required: expMatch ? expMatch[0] : '',\n      posted_date: dateMatch ? dateMatch[0] : '',\n      snippet: snippet,\n      url: r.url || '',\n      portal: portal,\n      country: country\n    });\n  }\n}\nreturn results.map(j => ({ json: j }));"
+      }
+    },
+    {
+      "id": "n10",
+      "name": "Merge All Jobs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2220, 300],
+      "parameters": { "mode": "passThrough", "output": "input1" }
+    },
+    {
+      "id": "n11",
+      "name": "Score & Rank (Claude)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $('Extract Profile JSON').item.json.config.anthropicKey }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 4000,
+          "messages": [{
+            "role": "user",
+            "content": "={{ 'You are a job relevance scorer. Score each job below against the candidate profile and return a ranked list.\\n\\nCandidate profile:\\n' + JSON.stringify($('Extract Profile JSON').item.json.profile, null, 1) + '\\n\\nJobs to score (max 60):\\n' + JSON.stringify($input.all().slice(0,60).map(i => i.json), null, 1) + '\\n\\nFor each job compute:\\n- skills_score (0-15): keyword overlap between job snippet and candidate skills\\n- experience_score (0-10): how well candidate years fit job requirement\\n- role_score (0-15): title match to target roles\\n- industry_score (0-8): industry relevance\\n- location_score (0-12): location preference (India locations preferred over US unless candidate targets US)\\n- freshness_score (0-5): recency\\n- total_score: sum\\n- relevance_pct: (total/65)*100 rounded to 1 decimal\\n- match_reason: one sentence explaining why this is a good match\\n\\nReturn ONLY a JSON array of scored job objects (same fields as input + score fields), sorted by total_score descending, top 20 only.' }}"
+          }]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n12",
+      "name": "Parse Ranked Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2660, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.all()[0].json.content[0].text.trim().replace(/^```(?:json)?\\s*/,'').replace(/\\s*```$/,'');\nconst ranked = JSON.parse(raw);\nreturn [{ json: { rankedJobs: ranked, profile: $('Extract Profile JSON').item.json.profile, config: $('Extract Profile JSON').item.json.config } }];"
+      }
+    },
+    {
+      "id": "n13",
+      "name": "ATS Analysis (Claude)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2880, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $json.config.anthropicKey }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 2500,
+          "messages": [{
+            "role": "user",
+            "content": "={{ 'Perform ATS analysis. Compare the resume against the top job descriptions and return JSON.\\n\\nResume keywords: ' + $json.profile.keywords.join(', ') + '\\nResume skills: ' + $json.profile.top_skills.join(', ') + '\\nTarget roles: ' + $json.profile.target_roles.join(', ') + '\\n\\nTop job snippets:\\n' + $json.rankedJobs.slice(0,6).map((j,i) => `${i+1}. ${j.title} at ${j.company}: ${j.snippet}`).join('\\n') + '\\n\\nReturn ONLY valid JSON with: ats_score_before (0-100), ats_score_after (0-100), missing_keywords (array of {keyword, frequency_in_jds, suggested_placement, sample_phrase}), present_keywords (array), weak_sections (array of {section, issue, suggestion}), action_verbs_to_add (array of 5), optimized_summary (string), optimized_skills_section (string)' }}"
+          }]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "n14",
+      "name": "Format Email (Code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, 300],
+      "parameters": {
+        "jsCode": "const atsRaw = $input.all()[0].json.content[0].text.trim().replace(/^```(?:json)?\\s*/,'').replace(/\\s*```$/,'');\nconst ats = JSON.parse(atsRaw);\nconst rankedJobs = $('Parse Ranked Jobs').item.json.rankedJobs;\nconst profile = $('Parse Ranked Jobs').item.json.profile;\nconst config = $('Parse Ranked Jobs').item.json.config;\n\nconst today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });\nconst name = profile.name || 'there';\nconst exp = profile.total_experience_years || '?';\nconst roles = (profile.target_roles || []).slice(0,3).join(' | ');\n\n// Build plain text\nlet plain = `Hi ${name},\\n\\nYour top ${Math.min(config.topN, rankedJobs.length)} job matches for ${today}.\\nProfile: ${exp} yrs | ${profile.profession_category} | ${roles}\\n\\n${'='.repeat(60)}\\nJOB MATCHES\\n${'='.repeat(60)}\\n`;\nfor (let i = 0; i < Math.min(config.topN, rankedJobs.length); i++) {\n  const j = rankedJobs[i];\n  const flag = j.country === 'India' ? '(India)' : '(US)';\n  plain += `\\nRANK ${i+1} ${flag} | Score: ${j.total_score || 0}/65 (${j.relevance_pct || 0}%)\\n`;\n  plain += `Title   : ${j.title || 'N/A'}\\n`;\n  plain += `Company : ${j.company || 'N/A'}\\n`;\n  plain += `Location: ${j.location || 'N/A'}\\n`;\n  plain += `Exp Req : ${j.experience_required || 'Not specified'}\\n`;\n  plain += `Why?    : ${j.match_reason || ''}\\n`;\n  plain += `Apply   : ${j.url || 'N/A'}\\n`;\n  plain += `${'-'.repeat(60)}\\n`;\n}\nplain += `\\n${'='.repeat(60)}\\nATS REPORT\\n${'='.repeat(60)}\\n`;\nplain += `Current ATS score : ${ats.ats_score_before}/100\\n`;\nplain += `Projected (after) : ${ats.ats_score_after}/100\\n\\nMISSING KEYWORDS:\\n`;\n(ats.missing_keywords || []).slice(0,8).forEach(k => {\n  plain += `  + ${k.keyword}  →  ${k.suggested_placement}\\n`;\n  if (k.sample_phrase) plain += `    e.g. \"${k.sample_phrase}\"\\n`;\n});\nif (ats.optimized_summary) plain += `\\nSUGGESTED SUMMARY:\\n  \"${ats.optimized_summary}\"\\n`;\nplain += `\\nPowered by Agentic Job Search — https://github.com/shubhamsinha89/Agentic-Job-Search`;\n\n// Build HTML\nconst pctColor = p => p >= 80 ? '#22c55e' : p >= 60 ? '#f59e0b' : '#ef4444';\nconst rows = rankedJobs.slice(0, config.topN).map((j,i) => `\n  <tr style=\"border-bottom:1px solid #e5e7eb\">\n    <td style=\"padding:10px;font-weight:600\">${i+1}. ${j.country==='India'?'🇮🇳':'🇺🇸'}</td>\n    <td style=\"padding:10px\">\n      <strong><a href=\"${j.url||'#'}\" style=\"color:#2563eb;text-decoration:none\">${j.title||'N/A'}</a></strong><br>\n      <span style=\"color:#6b7280;font-size:13px\">${j.company||''} · ${j.location||''}</span><br>\n      <span style=\"color:#9ca3af;font-size:12px\">${j.portal||''} · ${j.posted_date||''}</span><br>\n      <span style=\"color:#4b5563;font-size:12px;font-style:italic\">${j.match_reason||''}</span>\n    </td>\n    <td style=\"padding:10px;text-align:center\">\n      <span style=\"background:${pctColor(j.relevance_pct||0)};color:white;padding:3px 9px;border-radius:10px;font-weight:700;font-size:13px\">${j.relevance_pct||0}%</span><br>\n      <span style=\"font-size:11px;color:#9ca3af\">${j.total_score||0}/65</span>\n    </td>\n    <td style=\"padding:10px;font-size:12px;color:#6b7280\">${j.experience_required||'N/A'}</td>\n  </tr>`).join('');\n\nconst missingKwHtml = (ats.missing_keywords||[]).slice(0,8).map(k =>\n  `<li><strong>${k.keyword}</strong> → <em>${k.suggested_placement}</em>${k.sample_phrase ? ` — \"${k.sample_phrase}\"` : ''}</li>`\n).join('');\n\nconst html = `<!DOCTYPE html><html><body style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:800px;margin:0 auto;padding:20px;color:#1f2937\">\n<div style=\"background:linear-gradient(135deg,#2563eb,#7c3aed);padding:24px;border-radius:12px;color:white;margin-bottom:24px\">\n  <h1 style=\"margin:0 0 6px 0;font-size:20px\">Your Daily Job Digest — ${today}</h1>\n  <p style=\"margin:0;opacity:.9\">${name} · ${exp} yrs · ${profile.profession_category}</p>\n  <p style=\"margin:4px 0 0;opacity:.8;font-size:13px\">${roles}</p>\n</div>\n<h2 style=\"border-bottom:2px solid #e5e7eb;padding-bottom:8px\">Top ${Math.min(config.topN, rankedJobs.length)} Matches</h2>\n<table style=\"width:100%;border-collapse:collapse;font-size:13px\">\n  <thead><tr style=\"background:#f9fafb;border-bottom:2px solid #e5e7eb\">\n    <th style=\"padding:8px;text-align:left;color:#6b7280\">#</th>\n    <th style=\"padding:8px;text-align:left;color:#6b7280\">Role</th>\n    <th style=\"padding:8px;text-align:center;color:#6b7280\">Match</th>\n    <th style=\"padding:8px;text-align:left;color:#6b7280\">Exp</th>\n  </tr></thead>\n  <tbody>${rows}</tbody>\n</table>\n<div style=\"background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:18px;margin-top:24px\">\n  <h2 style=\"margin:0 0 10px;color:#92400e;font-size:15px\">ATS Optimization — Score: ${ats.ats_score_before}/100 → ${ats.ats_score_after}/100</h2>\n  <strong style=\"color:#78350f\">Add these keywords to your resume:</strong>\n  <ul style=\"font-size:13px;color:#78350f;margin:8px 0\">${missingKwHtml}</ul>\n  ${ats.optimized_summary ? `<p style=\"font-size:13px;color:#78350f\"><strong>Suggested summary:</strong> \"${ats.optimized_summary}\"</p>` : ''}\n</div>\n<p style=\"font-size:11px;color:#9ca3af;margin-top:20px;text-align:center\">\n  Powered by <a href=\"https://github.com/shubhamsinha89/Agentic-Job-Search\" style=\"color:#2563eb\">Agentic Job Search</a> · India + US portals\n</p></body></html>`;\n\nreturn [{ json: {\n  subject: `Top ${Math.min(config.topN, rankedJobs.length)} Job Matches – ${today}`,\n  to: config.emailRecipient,\n  plain,\n  html\n} }];"
+      }
+    },
+    {
+      "id": "n15",
+      "name": "Send Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [3320, 300],
+      "parameters": {
+        "operation": "send",
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_GMAIL_CREDENTIAL_ID", "name": "Gmail account" }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule":          { "main": [[{ "node": "Load Config",               "type": "main", "index": 0 }]] },
+    "Load Config":             { "main": [[{ "node": "Read Resume File",           "type": "main", "index": 0 }]] },
+    "Read Resume File":        { "main": [[{ "node": "Parse Resume (Claude)",      "type": "main", "index": 0 }]] },
+    "Parse Resume (Claude)":   { "main": [[{ "node": "Extract Profile JSON",       "type": "main", "index": 0 }]] },
+    "Extract Profile JSON":    { "main": [[{ "node": "Generate Search Queries (Claude)", "type": "main", "index": 0 }]] },
+    "Generate Search Queries (Claude)": { "main": [[{ "node": "Build Portal+Query List", "type": "main", "index": 0 }]] },
+    "Build Portal+Query List": { "main": [[{ "node": "Search Brave API",           "type": "main", "index": 0 }]] },
+    "Search Brave API":        { "main": [[{ "node": "Extract Job Listings",       "type": "main", "index": 0 }]] },
+    "Extract Job Listings":    { "main": [[{ "node": "Merge All Jobs",             "type": "main", "index": 0 }]] },
+    "Merge All Jobs":          { "main": [[{ "node": "Score & Rank (Claude)",      "type": "main", "index": 0 }]] },
+    "Score & Rank (Claude)":   { "main": [[{ "node": "Parse Ranked Jobs",          "type": "main", "index": 0 }]] },
+    "Parse Ranked Jobs":       { "main": [[{ "node": "ATS Analysis (Claude)",      "type": "main", "index": 0 }]] },
+    "ATS Analysis (Claude)":   { "main": [[{ "node": "Format Email (Code)",        "type": "main", "index": 0 }]] },
+    "Format Email (Code)":     { "main": [[{ "node": "Send Gmail",                 "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "job-search" }, { "name": "ai-agent" }],
+  "meta": { "templateCredsSetupCompleted": false }
+}

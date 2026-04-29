@@ -1,7 +1,11 @@
 # Personal files — keep off GitHub
 resume/resume.md
+resume/resume_optimized.md
 config/search_config.yaml
 agent/generated_prompt.md
+
+# n8n secrets
+n8n/.env
 
 # Python
 __pycache__/
