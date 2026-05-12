@@ -1,5 +1,7 @@
-# Core AI
-anthropic>=0.40.0
+# LLM providers — install only what you use
+openai>=1.30.0            # required for Groq + Ollama (OpenAI-compatible)
+anthropic>=0.40.0         # optional — only if using LLM_PROVIDER=anthropic
+# google-generativeai>=0.7  # optional — only if using LLM_PROVIDER=gemini
 
 # Environment variables
 python-dotenv>=0.21.0

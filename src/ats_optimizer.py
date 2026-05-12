@@ -7,7 +7,7 @@ to identify ATS keyword gaps and generate an optimised resume variant.
 import json
 import os
 import re
-import anthropic
+from src.llm_client import complete, complete_json
 
 
 ATS_ANALYSIS_PROMPT = """You are an expert ATS (Applicant Tracking System) optimizer.
@@ -83,7 +83,6 @@ def analyze_ats(
     Returns:
         ATS analysis dict
     """
-    client = anthropic.Anthropic(api_key=api_key or os.environ["ANTHROPIC_API_KEY"])
     resume_text = profile.get("_raw_text", "")
 
     jd_blocks = []
@@ -99,17 +98,7 @@ def analyze_ats(
         resume_text=resume_text,
         job_descriptions="\n\n".join(jd_blocks),
     )
-
-    msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=3000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw = msg.content[0].text.strip()
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-    return json.loads(raw)
+    return complete_json(prompt, max_tokens=3000)
 
 
 def generate_optimized_resume(profile: dict, ats_analysis: dict, api_key: str = None) -> str:
@@ -124,7 +113,6 @@ def generate_optimized_resume(profile: dict, ats_analysis: dict, api_key: str = 
     Returns:
         Rewritten resume as Markdown string
     """
-    client = anthropic.Anthropic(api_key=api_key or os.environ["ANTHROPIC_API_KEY"])
     resume_text = profile.get("_raw_text", "")
     target_roles = ", ".join(profile.get("target_roles", [])[:4])
 
@@ -133,13 +121,7 @@ def generate_optimized_resume(profile: dict, ats_analysis: dict, api_key: str = 
         ats_analysis=json.dumps(ats_analysis, indent=2),
         target_roles=target_roles,
     )
-
-    msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=4000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return msg.content[0].text.strip()
+    return complete(prompt, max_tokens=4000)
 
 
 def ats_summary_for_email(ats: dict) -> str:

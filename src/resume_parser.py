@@ -9,7 +9,7 @@ import os
 import re
 from pathlib import Path
 
-import anthropic
+from src.llm_client import complete_json, provider_info
 
 
 PARSE_PROMPT = """You are a resume parser. Extract all information from the resume below into a structured JSON object.
@@ -104,31 +104,15 @@ def parse_resume(file_path: str, api_key: str = None) -> dict:
 
     Args:
         file_path: Path to resume (MD / TXT / DOCX / PDF)
-        api_key:   Anthropic API key (falls back to ANTHROPIC_API_KEY env var)
+        api_key:   Unused — provider is set via LLM_PROVIDER env var
 
     Returns:
         Structured profile dict
     """
     raw_text = read_resume_file(file_path)
-    client = anthropic.Anthropic(api_key=api_key or os.environ["ANTHROPIC_API_KEY"])
+    print(f"  LLM provider : {provider_info()}")
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2048,
-        messages=[
-            {
-                "role": "user",
-                "content": PARSE_PROMPT.format(resume_text=raw_text),
-            }
-        ],
-    )
-
-    raw = message.content[0].text.strip()
-    # Strip markdown code fences if present
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-
-    profile = json.loads(raw)
+    profile = complete_json(PARSE_PROMPT.format(resume_text=raw_text), max_tokens=2048)
     profile["_raw_text"] = raw_text  # keep original for ATS analysis
     return profile
 

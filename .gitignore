@@ -9,6 +9,7 @@ agent/generated_prompt.md
 n8n/.env
 
 # Python
+.venv/
 __pycache__/
 *.py[cod]
 *.egg-info/

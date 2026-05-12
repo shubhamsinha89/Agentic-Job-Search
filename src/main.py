@@ -78,19 +78,17 @@ def run(
 ):
     config = load_config(config_path)
 
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    from src.llm_client import PROVIDER, provider_info
     brave_key = os.environ.get("BRAVE_SEARCH_API_KEY", "")
 
-    if not anthropic_key:
-        print("ERROR: ANTHROPIC_API_KEY environment variable not set.")
-        sys.exit(1)
+    print(f"\n  LLM provider : {provider_info()}")
     if not brave_key:
-        print("ERROR: BRAVE_SEARCH_API_KEY environment variable not set.")
+        print("ERROR: BRAVE_SEARCH_API_KEY not set. Get a free key at brave.com/search/api")
         sys.exit(1)
 
     # ── 1. Parse resume ────────────────────────────────────────────────────
     print("\n[1/5] Parsing resume...")
-    profile = parse_resume(resume_path, api_key=anthropic_key)
+    profile = parse_resume(resume_path)
     print(f"  Name      : {profile.get('name')}")
     print(f"  Profession: {profile.get('profession_category')}")
     print(f"  Experience: {profile.get('total_experience_years')} years")
@@ -98,7 +96,7 @@ def run(
 
     # ── 2. Search jobs ─────────────────────────────────────────────────────
     print("\n[2/5] Searching India + US job portals...")
-    raw_jobs = search_all(profile, config, brave_api_key=brave_key, anthropic_api_key=anthropic_key)
+    raw_jobs = search_all(profile, config, brave_api_key=brave_key)
 
     # ── 3. Score & rank ────────────────────────────────────────────────────
     print("\n[3/5] Scoring and ranking jobs...")
@@ -111,14 +109,14 @@ def run(
 
     # ── 4. ATS analysis ────────────────────────────────────────────────────
     print("\n[4/5] Running ATS analysis...")
-    ats = analyze_ats(profile, ranked, api_key=anthropic_key)
+    ats = analyze_ats(profile, ranked)
     print(f"  ATS score before: {ats.get('ats_score_before')}/100")
     print(f"  ATS score after : {ats.get('ats_score_after')}/100")
     print(f"  Missing keywords: {len(ats.get('missing_keywords', []))}")
 
     if save_optimized_resume:
         print("  Generating optimised resume...")
-        optimized = generate_optimized_resume(profile, ats, api_key=anthropic_key)
+        optimized = generate_optimized_resume(profile, ats)
         out_path = ROOT / "resume" / "resume_optimized.md"
         out_path.write_text(optimized, encoding="utf-8")
         print(f"  Saved to: {out_path}")

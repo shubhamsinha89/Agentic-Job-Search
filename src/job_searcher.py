@@ -7,8 +7,8 @@ Uses Claude to auto-generate search queries from the parsed resume profile.
 import os
 import time
 from typing import Optional
-import anthropic
 import requests
+from src.llm_client import complete_json
 
 
 BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
@@ -48,8 +48,7 @@ Example output format:
 
 
 def generate_queries(profile: dict, api_key: str = None) -> list:
-    """Use Claude to generate job-search queries tailored to the profile."""
-    client = anthropic.Anthropic(api_key=api_key or os.environ["ANTHROPIC_API_KEY"])
+    """Generate job-search queries tailored to the profile via configured LLM."""
     prompt = QUERY_PROMPT.format(
         profession_category=profile.get("profession_category", ""),
         seniority_level=profile.get("seniority_level", ""),
@@ -58,16 +57,7 @@ def generate_queries(profile: dict, api_key: str = None) -> list:
         top_skills=", ".join(profile.get("top_skills", [])[:8]),
         industries=", ".join(profile.get("industries", [])[:4]),
     )
-    msg = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=512,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    import json, re
-    raw = msg.content[0].text.strip()
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-    return json.loads(raw)
+    return complete_json(prompt, max_tokens=512)
 
 
 def _brave_search(query: str, brave_api_key: str, count: int = 10) -> list:
