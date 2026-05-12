@@ -1,4 +1,5 @@
 # Personal files — keep off GitHub
+.env
 resume/resume.md
 resume/resume_optimized.md
 config/search_config.yaml

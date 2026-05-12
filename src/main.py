@@ -11,7 +11,6 @@ Usage:
 """
 
 import argparse
-import json
 import os
 import smtplib
 import sys
@@ -23,6 +22,16 @@ import yaml
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
+
+# Load .env from project root if it exists
+try:
+    from dotenv import load_dotenv
+    _env = ROOT / ".env"
+    if _env.exists():
+        load_dotenv(_env)
+        print(f"  Loaded env from {_env}")
+except ImportError:
+    pass
 
 from src.resume_parser import parse_resume, profile_summary_line
 from src.job_searcher import search_all

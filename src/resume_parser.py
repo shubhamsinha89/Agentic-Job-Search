@@ -15,7 +15,7 @@ import anthropic
 PARSE_PROMPT = """You are a resume parser. Extract all information from the resume below into a structured JSON object.
 
 Return ONLY valid JSON with this exact schema:
-{
+{{
   "name": "string",
   "email": "string",
   "phone": "string",
@@ -28,9 +28,9 @@ Return ONLY valid JSON with this exact schema:
   "soft_skills": ["list of top 5 soft skills"],
   "industries": ["industries the person has worked in"],
   "keywords": ["30 most important ATS keywords from this resume"],
-  "education": [{"degree": "string", "institution": "string", "year": number}],
+  "education": [{{"degree": "string", "institution": "string", "year": number}}],
   "employment_history": [
-    {
+    {{
       "title": "string",
       "company": "string",
       "industry": "string",
@@ -38,14 +38,14 @@ Return ONLY valid JSON with this exact schema:
       "end_date": "string",
       "duration_months": number,
       "key_achievements": ["list of 3 key achievements or responsibilities"]
-    }
+    }}
   ],
   "languages": ["list of languages"],
   "certifications": ["list of certifications if any"],
   "summary": "2-3 sentence professional summary",
   "seniority_level": "Junior | Mid | Senior | Lead | Director | VP | C-Suite",
   "profession_category": "e.g. Human Resources | Software Engineering | Finance | Marketing | etc."
-}
+}}
 
 Resume:
 {resume_text}"""
